@@ -17,5 +17,4 @@ install:
   - make virtualenv
 
 script:
-  - export SCOUT_VERSION=$(make version)
   - make build

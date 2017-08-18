@@ -18,8 +18,10 @@ class Scout:
         self.disabled = os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
 
     def report(self, **kwargs):
+        result = {'latest_version': self.version}
+
         if self.disabled:
-            pass
+            return result
 
         merged_metadata = Scout.__merge_dicts(self.metadata, kwargs)
 
@@ -36,8 +38,6 @@ class Scout:
         }
 
         url = ("https://" if self.use_https else "http://") + "{}/scout" .format(self.scout_host).lower()
-        result = {'latest_version': self.version}
-
         try:
             resp = requests.post(url, json=payload, headers=headers)
             if resp.status_code / 100 == 2:
