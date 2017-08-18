@@ -15,7 +15,7 @@ The following information is collected and sent during version checks:
 
 - Application Name
 - Application Version
-- Install Identifier (locally generated for only Kubernaut and stored in `${HOME}/.config/kubernaut/id`)
+- Install Identifier (locally generated for each app and stored in `${HOME}/.config/${APP}/id`)
 - Platform Information (Operating System, Python version)
 
 The reporting code can be found in [scout.py](scout/scout.py).
