@@ -1,5 +1,7 @@
 # scout.py
 
+[![Build Status](https://travis-ci.org/datawire/scout.py.svg?branch=master)](https://travis-ci.org/datawire/scout.py)
+
 Scout.py is our usage reporting API client for Python clients at Datawire. Scout.py collects some basic information about users so it can send important client notices such as new version availability and security bulletins. We also use the information to anonymously aggregate basic usage analytics.
 
 ## Why?
