@@ -1,6 +1,7 @@
 import requests
 import unittest
 import uuid
+import os
 
 from unittest import mock
 from .scout import Scout
@@ -30,6 +31,27 @@ def mocked_requests_post(*args, **kwargs):
 
 
 class ScoutTestCase(unittest.TestCase):
+
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_disable_by_SCOUT_DISABLE_environment_variable(self, mock_post):
+        for v in {"1", "true", "yes"}:
+            os.environ["SCOUT_DISABLE"] = v
+
+            scout = Scout(app="unknown", version="0.1.0", install_id=install_id)
+            scout.report()
+
+            self.assertFalse(mock_post.called)
+            del os.environ["SCOUT_DISABLE"]
+
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_disable_by_TRAVIS_REPO_SLUG_environment_variable(self, mock_post):
+        os.environ["TRAVIS_REPO_SLUG"] = "datawire/foobar"
+
+        scout = Scout(app="unknown", version="0.1.0", install_id=install_id)
+        scout.report()
+
+        self.assertFalse(mock_post.called)
+        del os.environ["TRAVIS_REPO_SLUG"]
 
     @mock.patch('requests.post', side_effect=mocked_requests_post)
     def test_report_for_unknown_app(self, mock_post):

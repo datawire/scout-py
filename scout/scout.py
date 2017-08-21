@@ -75,6 +75,6 @@ class Scout:
     @staticmethod
     def __is_disabled():
         if str(os.getenv("TRAVIS_REPO_SLUG")).startswith("datawire/"):
-            os.environ["SCOUT_DISABLE"] = "1"
+            return True
 
         return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
