@@ -15,7 +15,7 @@ class Scout:
         # scout options; controlled via env vars
         self.scout_host = os.getenv("SCOUT_HOST", "kubernaut.io")
         self.use_https = os.getenv("SCOUT_HTTPS", "1").lower() in {"1", "true", "yes"}
-        self.disabled = os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
+        self.disabled = Scout.__is_disabled()
 
     def report(self, **kwargs):
         result = {'latest_version': self.version}
@@ -71,3 +71,10 @@ class Scout:
         z = x.copy()
         z.update(y)
         return z
+
+    @staticmethod
+    def __is_disabled():
+        if str(os.getenv("TRAVIS_REPO_SLUG")).startswith("datawire/"):
+            return True
+
+        return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
