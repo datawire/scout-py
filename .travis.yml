@@ -6,7 +6,7 @@ python:
 branches:
   only:
     - master
-  `- "/^\\d+\\.\\d+(\\.\\d+)?$/"
+    - "/^\\d+\\.\\d+(\\.\\d+)?$/"
 
 before_install:
   - pip install tox-travis
