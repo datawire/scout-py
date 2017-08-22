@@ -1,13 +1,12 @@
----
 language: python
-python:
-  - "3.5"
 
-# Only build master branch and tags of form 0.1 or 1.0.2 (all PRs will be built):
+python:
+  - '3.5'
+
 branches:
   only:
     - master
-    - /^\d+\.\d+(\.\d+)?$/
+  `- "/^\\d+\\.\\d+(\\.\\d+)?$/"
 
 before_install:
   - pip install tox-travis
@@ -18,3 +17,11 @@ install:
 
 script:
   - make build
+
+deploy:
+  provider: pypi
+  user: d6e-automaton
+  password:
+    secure: P/wiqYVB6TtxYar25aKsSKWlM3Lq2C4jMYHPhMtEd57F7vMXOy3yjtlDjJLtMfVl8Yo0samO7JCXFgZ2JSHxFw9AJCFsNYH8UxujMNGCaFKmxjVDslO5WlnwyW+Ow49QSyOKFngXRSwQDDKpFQZDt2m9NntHXco+97agM8CRn+tjbxCW43K1n0DPPUaZAnWoabqsGXgIxlaDN50O9dDEr6oFuvqzi4Ef9A7gMbe+eGdPiHnyQbR3PZxwDLuRdKBYrUO1iROjcbkRezjKvE5ZBlSTJ7ztuF4DgBkyn0T9SJd1GusJRh2L+ZlH7/VYAmAyh9cOaLD+GeeHQQWw1yJ88LpRhleIwe/rIIC2AYoEcgKntcQ3ReJn0RB8iX6GGMTJrsNGXuSWWjkiDkgCSAaTCZsIbLkXPp/uWJKaIRDTH1qTb3brn/zQw0YdCg39tzb3gOcW5bG0zoCzuWTr1LB1jVRSDnQ8gXDfLZZXdc1/olMX6laWeZxx6iWtZBMMmPVIwZiXYpJNm4r0A4jYOCFrbwfhi9NvYduiN/HGRw0sR9xSRk/QQr3d2i2RTcOOs5OMkc2xyP9h5hxcnvA22HF151omfFDd4A8dmn0FWT4j4ULuHmQ6yY/fSatVbDleS6OsxhQcStjw/HAbG8TOYKO62SSoypMtA8D1p1bqyguuPDg=
+  on:
+    tags: true
