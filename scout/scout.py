@@ -1,16 +1,20 @@
+import errno
 import os
 import platform
 import requests
 
+from uuid import uuid4
+
 
 class Scout:
 
-    def __init__(self, app, version, install_id, **kwargs):
+    def __init__(self, app, version, **kwargs):
         self.app = Scout.__not_blank("app", app)
         self.version = Scout.__not_blank("version", version)
-        self.install_id = Scout.__not_blank("install_id", install_id)
         self.metadata = kwargs if kwargs is not None else {}
         self.user_agent = self.create_user_agent()
+
+        self.__init_install_id(app)
 
         # scout options; controlled via env vars
         self.scout_host = os.getenv("SCOUT_HOST", "kubernaut.io")
@@ -37,7 +41,7 @@ class Scout:
             'metadata': merged_metadata
         }
 
-        url = ("https://" if self.use_https else "http://") + "{}/scout" .format(self.scout_host).lower()
+        url = ("https://" if self.use_https else "http://") + "{}/scout".format(self.scout_host).lower()
         try:
             resp = requests.post(url, json=payload, headers=headers)
             if resp.status_code / 100 == 2:
@@ -46,6 +50,9 @@ class Scout:
             # If scout is down or we are getting errors just proceed as if nothing happened. It should not impact the
             # user at all.
             pass
+
+        if "new_install" in self.metadata:
+            del self.metadata["new_install"]
 
         return result
 
@@ -58,6 +65,26 @@ class Scout:
             platform.python_version()).lower()
 
         return result
+
+    def __init_install_id(self, app):
+        config_root = os.path.join(os.path.expanduser("~"), ".config", app)
+        try:
+            os.makedirs(config_root)
+        except OSError as ex:
+            if ex.errno == errno.EEXIST and os.path.isdir(config_root):
+                pass
+            else:
+                raise
+
+        id_file = os.path.join(config_root, "id")
+        if not os.path.isfile(id_file):
+            with open(id_file, 'w') as f:
+                self.install_id = str(uuid4())
+                self.metadata["new_install"] = True
+                f.write(self.install_id)
+        else:
+            with open(id_file, 'r') as f:
+                self.install_id = f.read()
 
     @staticmethod
     def __not_blank(name, value):
