@@ -3,6 +3,7 @@ import os
 import platform
 import requests
 
+from requests.exceptions import Timeout
 from uuid import uuid4
 
 
@@ -43,7 +44,7 @@ class Scout:
 
         url = ("https://" if self.use_https else "http://") + "{}/scout".format(self.scout_host).lower()
         try:
-            resp = requests.post(url, json=payload, headers=headers)
+            resp = requests.post(url, json=payload, headers=headers, timeout=1)
             if resp.status_code / 100 == 2:
                 result = Scout.__merge_dicts(result, resp.json())
         except:
