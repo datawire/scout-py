@@ -12,7 +12,29 @@ from uuid import uuid4
 
 class Scout:
 
-    def __init__(self, app, version, install_id=None, id_plugin=None, **kwargs):
+    def __init__(self, app, version, install_id=None, id_plugin=None, **kwargs): 
+        """
+        Create a new Scout instance for later reports.
+
+        :param app: The application name. Required.
+        :param version: The application version. Required.
+        :param install_id: Optional install_id. If set, Scout will believe it.
+        :param id_plugin: Optional plugin function for obtaining an install_id. See below.
+        :param kwargs: Any other keyword arguments will be merged into Scout's metadata.
+
+        If an id_plugin is present, it is called with the app name as its sole parameter,
+        and must return
+
+        - None to fall back to the default filesystem ID, or
+        - a dict containing the ID and optional metadata:
+           - The dict **must** have an `install_id` key with a non-empty value.
+           - The dict **may** have other keys present, which will all be merged into
+             Scout's `metadata`.
+
+        If the plugin returns something invalid, Scout falls back to the default filesystem
+        ID.
+        """
+        
         self.app = Scout.__not_blank("app", app)
         self.version = Scout.__not_blank("version", version)
         self.metadata = kwargs if kwargs is not None else {}
