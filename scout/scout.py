@@ -2,6 +2,7 @@ import sys
 
 import errno
 import json
+import logging
 import os
 import platform
 import requests
@@ -11,37 +12,17 @@ from requests.exceptions import Timeout
 from uuid import uuid4
 
 
-class DummyLogger:
-    def __init__(self):
-        pass
-
-    def debug(self, *args, **kwargs):
-        pass
-
-    def info(self, *args, **kwargs):
-        pass
-
-    def warning(self, *args, **kwargs):
-        pass
-
-    def error(self, *args, **kwargs):
-        pass
-
 class Scout:
 
-    def __init__(self, app, version, logger=None, install_id=None, id_plugin=None, **kwargs): 
+    def __init__(self, app, version, install_id=None, id_plugin=None, **kwargs): 
         """
         Create a new Scout instance for later reports.
 
         :param app: The application name. Required.
         :param version: The application version. Required.
-        :param logger: Optional logger for debugging. See below.
         :param install_id: Optional install_id. If set, Scout will believe it.
         :param id_plugin: Optional plugin function for obtaining an install_id. See below.
         :param kwargs: Any other keyword arguments will be merged into Scout's metadata.
-
-        If a logger is present, it must act like the Python logging module -- specifically,
-        Scout uses logger.debug, logger.info, and logger.warning.
 
         If an id_plugin is present, it is called with the Scout instance as its first
         parameter and the app name as its second parameter. It must return
@@ -58,9 +39,10 @@ class Scout:
 
         self.app = Scout.__not_blank("app", app)
         self.version = Scout.__not_blank("version", version)
-        self.logger = logger if logger else DummyLogger()
         self.metadata = kwargs if kwargs is not None else {}
         self.user_agent = self.create_user_agent()
+
+        self.logger = logging.getLogger("datawire.scout")
 
         self.install_id = install_id
 
@@ -240,7 +222,7 @@ class Scout:
             r = requests.post(base_url, headers=auth_headers, verify=False, json=cm)
 
             if r.status_code == 201:
-                scout.logger.info("Scout: saved install_id %s" % install_id)
+                scout.logger.debug("Scout: saved install_id %s" % install_id)
 
                 plugin_response = {
                     "install_id": install_id,
