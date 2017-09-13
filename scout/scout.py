@@ -1,7 +1,10 @@
+import sys
+
 import errno
 import os
 import platform
 import requests
+import traceback
 
 from requests.exceptions import Timeout
 from uuid import uuid4
@@ -47,10 +50,13 @@ class Scout:
             resp = requests.post(url, json=payload, headers=headers, timeout=1)
             if resp.status_code / 100 == 2:
                 result = Scout.__merge_dicts(result, resp.json())
-        except:
+        except Exception as e:
             # If scout is down or we are getting errors just proceed as if nothing happened. It should not impact the
             # user at all.
-            pass
+            tb = "\n".join(traceback.format_exception(*sys.exc_info()))
+
+            result['exception'] = e
+            result['traceback'] = tb
 
         if "new_install" in self.metadata:
             del self.metadata["new_install"]
