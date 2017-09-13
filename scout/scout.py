@@ -35,6 +35,12 @@ class Scout:
 
         If the plugin returns something invalid, Scout falls back to the default filesystem
         ID.
+
+        Scout logs to the datawire.scout logger. It assumes that the logging system is
+        configured to a sane default level, but you can change Scout's debug level with e.g.
+
+        logging.getLogger("datawire.scout").setLevel(logging.DEBUG)
+
         """
 
         self.app = Scout.__not_blank("app", app)
