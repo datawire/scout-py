@@ -12,13 +12,27 @@ from uuid import uuid4
 
 class Scout:
 
-    def __init__(self, app, version, **kwargs):
+    def __init__(self, app, version, install_id=None, id_plugin=None, **kwargs):
         self.app = Scout.__not_blank("app", app)
         self.version = Scout.__not_blank("version", version)
         self.metadata = kwargs if kwargs is not None else {}
         self.user_agent = self.create_user_agent()
 
-        self.__init_install_id(app)
+        if install_id:
+            self.install_id = install_id
+        elif id_plugin:
+            plugin_response = id_plugin(app)
+
+            if plugin_response:
+                if "install_id" in plugin_response:
+                    self.install_id = plugin_response["install_id"]
+                    del(plugin_response["install_id"])
+
+                if plugin_response:
+                    self.metadata = Scout.__merge_dicts(self.metadata, plugin_response)
+
+        if not self.install_id:
+            self.install_id = self.__filesystem_install_id(app)
 
         # scout options; controlled via env vars
         self.scout_host = os.getenv("SCOUT_HOST", "kubernaut.io")
@@ -73,7 +87,7 @@ class Scout:
 
         return result
 
-    def __init_install_id(self, app):
+    def __filesystem_install_id(self, app):
         config_root = os.path.join(os.path.expanduser("~"), ".config", app)
         try:
             os.makedirs(config_root)
@@ -86,12 +100,14 @@ class Scout:
         id_file = os.path.join(config_root, "id")
         if not os.path.isfile(id_file):
             with open(id_file, 'w') as f:
-                self.install_id = str(uuid4())
+                install_id = str(uuid4())
                 self.metadata["new_install"] = True
-                f.write(self.install_id)
+                f.write(install_id)
         else:
             with open(id_file, 'r') as f:
-                self.install_id = f.read()
+                install_id = f.read()
+
+        return install_id
 
     @staticmethod
     def __not_blank(name, value):
