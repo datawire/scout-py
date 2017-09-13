@@ -10,7 +10,7 @@ install_id = str(uuid.uuid4())
 
 PLUGIN_UUID = str(uuid.uuid4())
 
-def install_id_plugin(app):
+def install_id_plugin(scout, app):
     return { "install_id": PLUGIN_UUID, "new_install": True, "swallow_speed": 42 }
 
 # This method will be used by the mock to replace requests.get

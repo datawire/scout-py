@@ -1,6 +1,7 @@
 import sys
 
 import errno
+import json
 import os
 import platform
 import requests
@@ -10,20 +11,40 @@ from requests.exceptions import Timeout
 from uuid import uuid4
 
 
+class DummyLogger:
+    def __init__(self):
+        pass
+
+    def debug(self, *args, **kwargs):
+        pass
+
+    def info(self, *args, **kwargs):
+        pass
+
+    def warning(self, *args, **kwargs):
+        pass
+
+    def error(self, *args, **kwargs):
+        pass
+
 class Scout:
 
-    def __init__(self, app, version, install_id=None, id_plugin=None, **kwargs): 
+    def __init__(self, app, version, logger=None, install_id=None, id_plugin=None, **kwargs): 
         """
         Create a new Scout instance for later reports.
 
         :param app: The application name. Required.
         :param version: The application version. Required.
+        :param logger: Optional logger for debugging. See below.
         :param install_id: Optional install_id. If set, Scout will believe it.
         :param id_plugin: Optional plugin function for obtaining an install_id. See below.
         :param kwargs: Any other keyword arguments will be merged into Scout's metadata.
 
-        If an id_plugin is present, it is called with the app name as its sole parameter,
-        and must return
+        If a logger is present, it must act like the Python logging module -- specifically,
+        Scout uses logger.debug, logger.info, and logger.warning.
+
+        If an id_plugin is present, it is called with the Scout instance as its first
+        parameter and the app name as its second parameter. It must return
 
         - None to fall back to the default filesystem ID, or
         - a dict containing the ID and optional metadata:
@@ -34,16 +55,19 @@ class Scout:
         If the plugin returns something invalid, Scout falls back to the default filesystem
         ID.
         """
-        
+
         self.app = Scout.__not_blank("app", app)
         self.version = Scout.__not_blank("version", version)
+        self.logger = logger if logger else DummyLogger()
         self.metadata = kwargs if kwargs is not None else {}
         self.user_agent = self.create_user_agent()
 
-        if install_id:
-            self.install_id = install_id
-        elif id_plugin:
-            plugin_response = id_plugin(app)
+        self.install_id = install_id
+
+        if not self.install_id and id_plugin:
+            plugin_response = id_plugin(self, app)
+
+            self.logger.debug("Scout: id_plugin returns {0}".format(json.dumps(plugin_response)))
 
             if plugin_response:
                 if "install_id" in plugin_response:
@@ -55,6 +79,8 @@ class Scout:
 
         if not self.install_id:
             self.install_id = self.__filesystem_install_id(app)
+
+        self.logger.debug("Scout using install_id {0}".format(self.install_id))
 
         # scout options; controlled via env vars
         self.scout_host = os.getenv("SCOUT_HOST", "kubernaut.io")
@@ -150,3 +176,78 @@ class Scout:
             return True
 
         return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
+
+    @staticmethod
+    def configmap_install_id_plugin(scout, app):
+        plugin_response = None
+        map_name = "scout.config.{0}".format(app)
+        base_url = "https://kubernetes/api/v1/namespaces/default/configmaps"
+
+        kube_token = None
+
+        try:
+            kube_token = open("/var/run/secrets/kubernetes.io/serviceaccount/token", "r").read()
+        except OSError:
+            pass
+
+        if not kube_token:
+            # We're not running in Kubernetes. Fall back to the usual filesystem stuff.
+            scout.logger.debug("Scout: not running in Kubernetes")
+            return None
+
+        # OK, we're in a cluster. Load our map.
+        auth_headers = { "Authorization": "Bearer " + kube_token }
+        install_id = None
+
+        r = requests.get("{0}/{1}".format(base_url, map_name),
+                         headers=auth_headers, verify=False)
+
+        if r.status_code == 200:
+            # OK, the map is present. What do we see?
+            map_data = r.json()
+
+            if "data" not in map_data:
+                # This is "impossible".
+                scout.logger.error("Scout: no map data in returned map???")
+            else:
+                map_data = map_data.get("data", {})
+                scout.logger.debug("Scout: configmap has map data %s" % json.dumps(map_data))
+
+                install_id = map_data.get("install_id", None)
+
+                if install_id:
+                    scout.logger.debug("Scout: got install_id %s from map" % install_id)
+                    plugin_response = { "install_id": install_id }
+
+        if not install_id:
+            # No extant install_id. Try to create a new one.
+            install_id = str(uuid4())
+
+            cm = {
+                "apiVersion":"v1",
+                "kind":"ConfigMap",
+                "metadata":{
+                    "name": map_name,
+                    "namespace":"default"
+                },
+                "data": {
+                    "install_id": install_id
+                }
+            }
+
+            scout.logger.debug("Scout: saving new install_id %s" % install_id)
+
+            r = requests.post(base_url, headers=auth_headers, verify=False, json=cm)
+
+            if r.status_code == 201:
+                scout.logger.info("Scout: saved install_id %s" % install_id)
+
+                plugin_response = {
+                    "install_id": install_id,
+                    "new_install": True
+                }
+            else:
+                scout.logger.error("Scout: could not save install_id: {0}, {1}".format(r.status_code, r.text))
+
+        scout.logger.debug("Scout: plugin_response %s" % json.dumps(plugin_response))
+        return plugin_response
