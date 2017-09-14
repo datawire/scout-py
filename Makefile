@@ -12,6 +12,9 @@ version:
 build: virtualenv
 	tox -e py3
 
+clean:
+	rm -rf build dist scout.py.egg-info virtualenv __pycache__
+
 ## Setup dependencies ##
 
 virtualenv:
