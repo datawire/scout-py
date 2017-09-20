@@ -14,7 +14,8 @@ from uuid import uuid4
 
 class Scout:
 
-    def __init__(self, app, version, install_id=None, id_plugin=None, **kwargs): 
+    def __init__(self, app, version, install_id=None,
+                 id_plugin=None, id_plugin_args={}, **kwargs): 
         """
         Create a new Scout instance for later reports.
 
@@ -22,10 +23,18 @@ class Scout:
         :param version: The application version. Required.
         :param install_id: Optional install_id. If set, Scout will believe it.
         :param id_plugin: Optional plugin function for obtaining an install_id. See below.
+        :param id_plugin_args: Optional arguments to id_plugin. See below.
         :param kwargs: Any other keyword arguments will be merged into Scout's metadata.
 
-        If an id_plugin is present, it is called with the Scout instance as its first
-        parameter and the app name as its second parameter. It must return
+        If an id_plugin is present, it is called with the following parameters: 
+
+        - this Scout instance
+        - the passed-in app name
+        - the passed-in id_plugin_args _as keyword arguments_
+
+        id_plugin(scout, app, **id_plugin_args)
+
+        It must return
 
         - None to fall back to the default filesystem ID, or
         - a dict containing the ID and optional metadata:
@@ -35,6 +44,9 @@ class Scout:
 
         If the plugin returns something invalid, Scout falls back to the default filesystem
         ID.
+
+        See also Scout.configmap_install_id_plugin, which is an id_plugin that knows how
+        to use a Kubernetes configmap (scout.config.$app) to store the install ID. 
 
         Scout logs to the datawire.scout logger. It assumes that the logging system is
         configured to a sane default level, but you can change Scout's debug level with e.g.
@@ -52,8 +64,11 @@ class Scout:
 
         self.install_id = install_id
 
+        if 'id_plugin' in self.metadata: del(metadata['id_plugin'])
+        if 'id_plugin_args' in self.metadata: del(metadata['id_plugin_args'])
+
         if not self.install_id and id_plugin:
-            plugin_response = id_plugin(self, app)
+            plugin_response = id_plugin(self, app, **id_plugin_args)
 
             self.logger.debug("Scout: id_plugin returns {0}".format(json.dumps(plugin_response)))
 
@@ -95,11 +110,20 @@ class Scout:
             'metadata': merged_metadata
         }
 
+        self.logger.debug("Scout: report payload: %s" % json.dumps(payload, indent=4))
+
         url = ("https://" if self.use_https else "http://") + "{}/scout".format(self.scout_host).lower()
+
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=1)
+
+            self.logger.debug("Scout: report returns %d (%s)" % (resp.status_code, resp.text))
+
             if resp.status_code / 100 == 2:
                 result = Scout.__merge_dicts(result, resp.json())
+        except OSError as e:
+            self.logger.warning("Scout: could not post report: %s" % e)
+            result['exception'] = 'could not post report: %s' % e
         except Exception as e:
             # If scout is down or we are getting errors just proceed as if nothing happened. It should not impact the
             # user at all.
@@ -166,17 +190,52 @@ class Scout:
         return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
 
     @staticmethod
-    def configmap_install_id_plugin(scout, app):
-        plugin_response = None
-        map_name = "scout.config.{0}".format(app)
-        base_url = "https://kubernetes/api/v1/namespaces/default/configmaps"
+    def configmap_install_id_plugin(scout, app, map_name=None, namespace="default"):
+        """
+        Scout id_plugin that uses a Kubernetes configmap to store the install ID.
 
-        kube_token = None
+        :param scout: Scout instance that's calling the plugin
+        :param app: Name of the application that's using Scout
+        :param map_name: Optional ConfigMap name to use; defaults to "scout.config.$app"
+        :param namespace: Optional Kubernetes namespace to use; defaults to "default"
+
+        This plugin assumes that the KUBERNETES_SERVICE_{HOST,PORT,PORT_HTTPS}
+        environment variables are set correctly, and it assumes the default Kubernetes
+        namespace unless the 'namespace' keyword argument is used to select a different
+        namespace.
+
+        If KUBERNETES_ACCESS_TOKEN is set in the environment, use that for the apiserver
+        access token -- otherwise, the plugin assumes that it's running in a Kubernetes
+        pod and tries to read its token from /var/run/secrets.
+        """
+
+        plugin_response = None
+
+        if not map_name:
+            map_name = "scout.config.{0}".format(app)
+
+        kube_host = os.environ.get('KUBERNETES_SERVICE_HOST', None)
 
         try:
-            kube_token = open("/var/run/secrets/kubernetes.io/serviceaccount/token", "r").read()
-        except OSError:
-            pass
+            kube_port = int(os.environ.get('KUBERNETES_SERVICE_PORT', 443))
+        except ValueError:
+            scout.logger.debug("Scout: KUBERNETES_SERVICE_PORT isn't numeric, defaulting to 443")
+            kube_port = 443
+
+        kube_proto = "https" if (kube_port == 443) else "http"
+
+        kube_token = os.environ.get('KUBERNETES_ACCESS_TOKEN', None)
+
+        if not kube_host:
+            # We're not running in Kubernetes. Fall back to the usual filesystem stuff.
+            scout.logger.debug("Scout: no KUBERNETES_SERVICE_HOST, not running in Kubernetes")
+            return None
+
+        if not kube_token:
+            try:
+                kube_token = open("/var/run/secrets/kubernetes.io/serviceaccount/token", "r").read()
+            except OSError:
+                pass
 
         if not kube_token:
             # We're not running in Kubernetes. Fall back to the usual filesystem stuff.
@@ -184,28 +243,39 @@ class Scout:
             return None
 
         # OK, we're in a cluster. Load our map.
+
+        base_url = "%s://%s:%s" % (kube_proto, kube_host, kube_port)
+        url_path = "api/v1/namespaces/%s/configmaps" % namespace
         auth_headers = { "Authorization": "Bearer " + kube_token }
         install_id = None
 
-        r = requests.get("{0}/{1}".format(base_url, map_name),
-                         headers=auth_headers, verify=False)
+        cm_url = "%s/%s" % (base_url, url_path)
+        fetch_url = "%s/%s" % (cm_url, map_name)
 
-        if r.status_code == 200:
-            # OK, the map is present. What do we see?
-            map_data = r.json()
+        scout.logger.debug("Scout: trying %s" % fetch_url)
 
-            if "data" not in map_data:
-                # This is "impossible".
-                scout.logger.error("Scout: no map data in returned map???")
-            else:
-                map_data = map_data.get("data", {})
-                scout.logger.debug("Scout: configmap has map data %s" % json.dumps(map_data))
+        try:
+            r = requests.get(fetch_url, headers=auth_headers, verify=False)
 
-                install_id = map_data.get("install_id", None)
+            if r.status_code == 200:
+                # OK, the map is present. What do we see?
+                map_data = r.json()
 
-                if install_id:
-                    scout.logger.debug("Scout: got install_id %s from map" % install_id)
-                    plugin_response = { "install_id": install_id }
+                if "data" not in map_data:
+                    # This is "impossible".
+                    scout.logger.error("Scout: no map data in returned map???")
+                else:
+                    map_data = map_data.get("data", {})
+                    scout.logger.debug("Scout: configmap has map data %s" % json.dumps(map_data))
+
+                    install_id = map_data.get("install_id", None)
+
+                    if install_id:
+                        scout.logger.debug("Scout: got install_id %s from map" % install_id)
+                        plugin_response = { "install_id": install_id }
+        except OSError as e:
+            scout.logger.debug("Scout: could not read configmap (map %s, namespace %s): %s" % 
+                               (map_name, namespace, e))
 
         if not install_id:
             # No extant install_id. Try to create a new one.
@@ -216,7 +286,7 @@ class Scout:
                 "kind":"ConfigMap",
                 "metadata":{
                     "name": map_name,
-                    "namespace":"default"
+                    "namespace": namespace,
                 },
                 "data": {
                     "install_id": install_id
@@ -225,17 +295,23 @@ class Scout:
 
             scout.logger.debug("Scout: saving new install_id %s" % install_id)
 
-            r = requests.post(base_url, headers=auth_headers, verify=False, json=cm)
+            saved = False
+            try:
+                r = requests.post(cm_url, headers=auth_headers, verify=False, json=cm)
 
-            if r.status_code == 201:
-                scout.logger.debug("Scout: saved install_id %s" % install_id)
+                if r.status_code == 201:
+                    saved = True
+                    scout.logger.debug("Scout: saved install_id %s" % install_id)
 
-                plugin_response = {
-                    "install_id": install_id,
-                    "new_install": True
-                }
-            else:
-                scout.logger.error("Scout: could not save install_id: {0}, {1}".format(r.status_code, r.text))
+                    plugin_response = {
+                        "install_id": install_id,
+                        "new_install": True
+                    }
+                else:
+                    scout.logger.error("Scout: could not save install_id: {0}, {1}".format(r.status_code, r.text))
+            except OSError as e:
+                logging.debug("Scout: could not write configmap (map %s, namespace %s): %s" % 
+                              (map_name, namespace, e))
 
         scout.logger.debug("Scout: plugin_response %s" % json.dumps(plugin_response))
         return plugin_response
