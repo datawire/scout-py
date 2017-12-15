@@ -64,12 +64,6 @@ class Scout:
 
         self.install_id = install_id
 
-        if 'id_plugin' in self.metadata:
-            del(metadata['id_plugin'])
-
-        if 'id_plugin_args' in self.metadata:
-            del(metadata['id_plugin_args'])
-
         if not self.install_id and id_plugin:
             plugin_response = id_plugin(self, app, **id_plugin_args)
 
