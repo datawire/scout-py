@@ -30,11 +30,13 @@ install_id = str(uuid.uuid4())
 
 PLUGIN_UUID = str(uuid.uuid4())
 
+
 def install_id_plugin(scout, app, hello="FAILED"):
-    return { "install_id": PLUGIN_UUID,
-             "new_install": True,
-             "swallow_speed": 42,
-             "hello": hello }
+    return {"install_id": PLUGIN_UUID,
+            "new_install": True,
+            "swallow_speed": 42,
+            "hello": hello}
+
 
 # This method will be used by the mock to replace requests.get
 def mocked_requests_post(*args, **kwargs):
@@ -65,6 +67,18 @@ def mocked_requests_post(*args, **kwargs):
 
 
 class ScoutTestCase(unittest.TestCase):
+
+    def test_scout_host_is_configurable(self):
+        scout = Scout(app="unknown", version="0.1.0", install_id=install_id)
+        assert scout.scout_host == "scout.svc.datawire.io"
+
+        scout = Scout(app="unknown", version="0.1.0", install_id=install_id, scout_host="foobar.baz.datawire.io")
+        assert scout.scout_host == "foobar.baz.datawire.io"
+
+        os.environ["SCOUT_HOST"] = "env.var.datawire.io"
+        scout = Scout(app="unknown", version="0.1.0", install_id=install_id)
+        assert scout.scout_host == "env.var.datawire.io"
+        del os.environ["SCOUT_HOST"]
 
     @mock.patch('requests.post', side_effect=mocked_requests_post)
     def test_disable_by_SCOUT_DISABLE_environment_variable(self, mock_post):
@@ -114,12 +128,13 @@ class ScoutTestCase(unittest.TestCase):
         """Scout install-id plugin should set the install_id and requisite metadata."""
 
         scout = Scout(app="foshizzolator", version="0.1.0", 
-                      id_plugin=install_id_plugin, id_plugin_args={ "hello": "world" })
+                      id_plugin=install_id_plugin, id_plugin_args={"hello": "world"})
 
         self.assertEqual(scout.install_id, PLUGIN_UUID)
         self.assertEqual(scout.metadata["new_install"], True)
         self.assertEqual(scout.metadata["swallow_speed"], 42)
         self.assertEqual(scout.metadata["hello"], "world")
+
 
 if __name__ == '__main__':
     unittest.main()
