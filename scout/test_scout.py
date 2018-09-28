@@ -70,7 +70,7 @@ class ScoutTestCase(unittest.TestCase):
 
     def test_scout_host_is_configurable(self):
         scout = Scout(app="unknown", version="0.1.0", install_id=install_id)
-        assert scout.scout_host == "scout.svc.datawire.io"
+        assert scout.scout_host == "metriton.datawire.io"
 
         scout = Scout(app="unknown", version="0.1.0", install_id=install_id, scout_host="foobar.baz.datawire.io")
         assert scout.scout_host == "foobar.baz.datawire.io"
