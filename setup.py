@@ -9,7 +9,7 @@ setup(
     packages=find_packages(exclude=["tests"]),
     include_package_data=True,
     install_requires=[
-        "requests==2.18.4"
+        "requests==2.20.1"
     ],
     author="datawire.io",
     author_email="dev@datawire.io",
