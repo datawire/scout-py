@@ -15,7 +15,7 @@ from uuid import uuid4
 class Scout:
 
     def __init__(self, app, version, install_id=None,
-                 id_plugin=None, id_plugin_args={}, scout_host="scout.svc.datawire.io", **kwargs):
+                 id_plugin=None, id_plugin_args={}, scout_host="kubernaut.io", **kwargs):
         """
         Create a new Scout instance for later reports.
 
@@ -109,7 +109,7 @@ class Scout:
 
         self.logger.debug("Scout: report payload: %s" % json.dumps(payload, indent=4))
 
-        url = ("https://" if self.use_https else "http://") + "{}/reports".format(self.scout_host).lower()
+        url = ("https://" if self.use_https else "http://") + "{}/scout".format(self.scout_host).lower()
 
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=1)
